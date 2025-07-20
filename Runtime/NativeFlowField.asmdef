@@ -1,0 +1,9 @@
+﻿{
+  "name": "NativeFlowField",
+  "rootNamespace": "NativeFlowField",
+  "allowUnsafeCode": true,
+  "references": [
+    "Unity.Mathematics",
+    "Unity.Burst"
+  ]
+}

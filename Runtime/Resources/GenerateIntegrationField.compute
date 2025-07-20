@@ -1,0 +1,64 @@
+﻿#pragma kernel GenerateIntegrationField
+
+#include "Adjacency.hlsl"
+
+uint Width;
+uint Height;
+int DiagonalMovement;
+StructuredBuffer<float> InputCosts;
+RWStructuredBuffer<float> OutputCosts;
+
+float getMinCost(uint x, uint y)
+{
+    float minCost = InputCosts[flatten(x, y, Width)];
+
+    if (minCost >= FLT_MAX) // Obstacle
+    {
+        return minCost;
+    }
+
+    [unroll]
+    for (uint i = 0; i < numberOfDirections[DiagonalMovement]; ++i)
+    {
+        int nx = x + offsets[i].x;
+        int ny = y + offsets[i].y;
+
+        if (nx >= 0 && (uint)nx < Width && ny >= 0 && (uint)ny < Height)
+        {
+            bool isDiagonal = i >= 4;
+            if (isDiagonal)
+            {
+                // Both orthogonal must be free
+                if (InputCosts[flatten(x + offsets[i].x, y, Width)] >= FLT_MAX-1) continue;
+                if (InputCosts[flatten(x, y + offsets[i].y, Width)] >= FLT_MAX-1) continue;
+            }
+            uint neighborIndex = flatten(nx, ny, Width);
+            float neighborCost = InputCosts[neighborIndex];
+
+            if (neighborCost < FLT_MAX && neighborCost > FLT_MIN)
+            {
+                float stepCost = costs[i];
+                if (minCost <= FLT_MIN) // Free
+                    minCost = neighborCost + stepCost;
+                else
+                    minCost = min(minCost, neighborCost + stepCost);
+            }
+        }
+    }
+
+    return minCost;
+}
+
+[numthreads(8, 8, 1)]
+void GenerateIntegrationField(uint3 id : SV_DispatchThreadID)
+{
+    uint x = id.x;
+    uint y = id.y;
+
+    if (x >= Width || y >= Height)
+    {
+        return;
+    }
+
+    OutputCosts[flatten(x, y, Width)] = getMinCost(x, y);
+}

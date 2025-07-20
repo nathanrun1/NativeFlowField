@@ -1,0 +1,27 @@
+#pragma kernel GenerateHeatMap
+
+uint Width;
+uint Height;
+StructuredBuffer<float> InputCosts;
+RWTexture2D<float> OutputHeatMap;
+
+int flatten(uint x, uint y)
+{
+    return x + y * Width;
+}
+
+[numthreads(8, 8, 1)]
+void GenerateHeatMap(uint3 id : SV_DispatchThreadID)
+{
+    uint x = id.x;
+    uint y = id.y;
+
+    uint selfIndex = flatten(x, y);
+
+    if (x >= Width || y >= Height)
+    {
+        return;
+    }
+
+    OutputHeatMap[int2(x, y)] = InputCosts[selfIndex];
+}

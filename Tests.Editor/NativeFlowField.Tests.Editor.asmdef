@@ -1,0 +1,11 @@
+﻿{
+  "name": "NativeFlowField.Tests.Editor",
+  "rootNamespace": "NativeFlowField.Tests",
+  "references": [
+    "NativeFlowField",
+    "Unity.Mathematics"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}
