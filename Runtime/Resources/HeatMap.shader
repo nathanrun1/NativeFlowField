@@ -58,6 +58,7 @@
             {
                 float value = UNITY_SAMPLE_TEX2D( _MainTex, i.uv );
 
+                if (value == 0) return float4(gradient(Gradient, 1), Alpha);  // Target
                 if (value <= FLT_MIN) return float4(0, 0, 0, 0); // Free
                 if (value >= FLT_MAX) return float4(0, 0, 0, 0); // Obstacle
                 if (value > MaxCost) return float4(0, 0, 0, 0); // Too far away from target
