@@ -1,6 +1,6 @@
 ﻿**GPU-powered flow field generation for Unity DOTS**
 
-<img src="https://i.imgur.com/zcKoRNy.gif" width="100%" />
+<img src="Media/banner.webp" width="100%" />
 
 ## Overview
 
