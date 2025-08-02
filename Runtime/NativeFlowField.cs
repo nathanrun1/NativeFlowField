@@ -48,7 +48,6 @@ namespace FlowFieldAI
         public int Iterations { get; set; } = 100;
         public int MaxIterationsPerFrame { get; set; }
         public bool DiagonalMovement { get; set; }
-        public bool AsyncCompute { get; set; } = true;
         public ComputeQueueType ComputeQueueType { get; set; } = ComputeQueueType.Background;
 
         public int FrameLatency { get; private set; }
@@ -147,21 +146,12 @@ namespace FlowFieldAI
 
         private void PerformIntegration(NativeArray<float> obstacleMap)
         {
-            if (AsyncCompute)
-            {
-                commandBuffer.name = "NativeDijkstraMap";
-                commandBuffer.Clear();
-                commandBuffer.SetExecutionFlags(CommandBufferExecutionFlags.AsyncCompute);
-                commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.Width, Width);
-                commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.Height, Height);
-                commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.DiagonalMovement, DiagonalMovement ? 1 : 0);
-            }
-            else
-            {
-                integrationComputeShader.SetInt(ShaderProperties.Width, Width);
-                integrationComputeShader.SetInt(ShaderProperties.Height, Height);
-                integrationComputeShader.SetBool(ShaderProperties.DiagonalMovement, DiagonalMovement);
-            }
+            commandBuffer.name = "NativeDijkstraMap";
+            commandBuffer.Clear();
+            commandBuffer.SetExecutionFlags(CommandBufferExecutionFlags.AsyncCompute);
+            commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.Width, Width);
+            commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.Height, Height);
+            commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.DiagonalMovement, DiagonalMovement ? 1 : 0);
 
             var maxIterationsPerFrame = MaxIterationsPerFrame;
             if (maxIterationsPerFrame <= 0 || maxIterationsPerFrame > Iterations)
@@ -172,13 +162,7 @@ namespace FlowFieldAI
 
             if (currentStep == 0)
             {
-                if (AsyncCompute)
-                {
-                    commandBuffer.SetBufferData(integrationFrontBuffer, obstacleMap);
-                } else
-                {
-                    integrationFrontBuffer.SetData(obstacleMap);
-                }
+                commandBuffer.SetBufferData(integrationFrontBuffer, obstacleMap);
             }
 
             var iterationsRemaining = Iterations - currentStep;
@@ -187,28 +171,14 @@ namespace FlowFieldAI
             for (var i = 0; i < iterationsThisFrame; i++)
             {
                 // Assign compute buffers
-                if (AsyncCompute)
-                {
-                    commandBuffer.SetComputeBufferParam(integrationComputeShader, integrationComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
-                    commandBuffer.SetComputeBufferParam(integrationComputeShader, integrationComputeShaderKernel, ShaderProperties.OutputCosts, integrationBackBuffer);
-                }
-                else
-                {
-                    integrationComputeShader.SetBuffer(integrationComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
-                    integrationComputeShader.SetBuffer(integrationComputeShaderKernel, ShaderProperties.OutputCosts, integrationBackBuffer);
-                }
+                commandBuffer.SetComputeBufferParam(integrationComputeShader, integrationComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
+                commandBuffer.SetComputeBufferParam(integrationComputeShader, integrationComputeShaderKernel, ShaderProperties.OutputCosts, integrationBackBuffer);
+
 
                 // Dispatch compute shader
                 var threadGroupsX = Mathf.CeilToInt(Width / 8f);
                 var threadGroupsY = Mathf.CeilToInt(Height / 8f);
-                if (AsyncCompute)
-                {
-                    commandBuffer.DispatchCompute(integrationComputeShader, integrationComputeShaderKernel, threadGroupsX, threadGroupsY, 1);
-                }
-                else
-                {
-                    integrationComputeShader.Dispatch(integrationComputeShaderKernel, threadGroupsX, threadGroupsY, 1);
-                }
+                commandBuffer.DispatchCompute(integrationComputeShader, integrationComputeShaderKernel, threadGroupsX, threadGroupsY, 1);
 
                 // Flip compute buffers
                 (integrationFrontBuffer, integrationBackBuffer) = (integrationBackBuffer, integrationFrontBuffer);
@@ -217,10 +187,7 @@ namespace FlowFieldAI
                 currentStep++;
             }
 
-            if (AsyncCompute)
-            {
-                Graphics.ExecuteCommandBufferAsync(commandBuffer, ComputeQueueType);
-            }
+            Graphics.ExecuteCommandBufferAsync(commandBuffer, ComputeQueueType);
         }
 
         private void GenerateFlowField()
@@ -228,25 +195,13 @@ namespace FlowFieldAI
             var threadGroupsX = Mathf.CeilToInt(Width / 8f);
             var threadGroupsY = Mathf.CeilToInt(Height / 8f);
 
-            if (AsyncCompute)
-            {
-                commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Width, Width);
-                commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Height, Height);
-                commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.DiagonalMovement, DiagonalMovement ? 1 : 0);
-                commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
-                commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.OutputFlowField, flowFieldBuffer);
-                commandBuffer.DispatchCompute(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, threadGroupsX, threadGroupsY, 1);
-                Graphics.ExecuteCommandBufferAsync(commandBuffer, ComputeQueueType);
-            }
-            else
-            {
-                generateFlowFieldComputeShader.SetInt(ShaderProperties.Width, Width);
-                generateFlowFieldComputeShader.SetInt(ShaderProperties.Height, Height);
-                generateFlowFieldComputeShader.SetBool(ShaderProperties.DiagonalMovement, DiagonalMovement);
-                generateFlowFieldComputeShader.SetBuffer(generateFlowFieldComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
-                generateFlowFieldComputeShader.SetBuffer(generateFlowFieldComputeShaderKernel, ShaderProperties.OutputFlowField, flowFieldBuffer);
-                generateFlowFieldComputeShader.Dispatch(generateFlowFieldComputeShaderKernel, threadGroupsX, threadGroupsY, 1);
-            }
+            commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Width, Width);
+            commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Height, Height);
+            commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.DiagonalMovement, DiagonalMovement ? 1 : 0);
+            commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
+            commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.OutputFlowField, flowFieldBuffer);
+            commandBuffer.DispatchCompute(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, threadGroupsX, threadGroupsY, 1);
+            Graphics.ExecuteCommandBufferAsync(commandBuffer, ComputeQueueType);
         }
 
         private void GenerateHeatMap()
@@ -258,23 +213,12 @@ namespace FlowFieldAI
 
             var threadGroupsX = Mathf.CeilToInt(Width / 8f);
             var threadGroupsY = Mathf.CeilToInt(Height / 8f);
-            if (AsyncCompute)
-            {
-                commandBuffer.SetComputeIntParam(generateHeatMapComputeShader, ShaderProperties.Width, Width);
-                commandBuffer.SetComputeIntParam(generateHeatMapComputeShader, ShaderProperties.Height, Height);
-                commandBuffer.SetComputeTextureParam(generateHeatMapComputeShader, generateHeatMapComputeShaderKernel, ShaderProperties.OutputHeatMap, heatMapBackBuffer);
-                commandBuffer.SetComputeBufferParam(generateHeatMapComputeShader, generateHeatMapComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
-                commandBuffer.DispatchCompute(generateHeatMapComputeShader, generateHeatMapComputeShaderKernel, threadGroupsX, threadGroupsY, 1);
-                Graphics.ExecuteCommandBufferAsync(commandBuffer, ComputeQueueType);
-            }
-            else
-            {
-                generateHeatMapComputeShader.SetInt(ShaderProperties.Width, Width);
-                generateHeatMapComputeShader.SetInt(ShaderProperties.Height, Height);
-                generateHeatMapComputeShader.SetTexture(generateHeatMapComputeShaderKernel, ShaderProperties.OutputHeatMap, heatMapBackBuffer);
-                generateHeatMapComputeShader.SetBuffer(generateHeatMapComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
-                generateHeatMapComputeShader.Dispatch(generateHeatMapComputeShaderKernel, threadGroupsX, threadGroupsY, 1);
-            }
+            commandBuffer.SetComputeIntParam(generateHeatMapComputeShader, ShaderProperties.Width, Width);
+            commandBuffer.SetComputeIntParam(generateHeatMapComputeShader, ShaderProperties.Height, Height);
+            commandBuffer.SetComputeTextureParam(generateHeatMapComputeShader, generateHeatMapComputeShaderKernel, ShaderProperties.OutputHeatMap, heatMapBackBuffer);
+            commandBuffer.SetComputeBufferParam(generateHeatMapComputeShader, generateHeatMapComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
+            commandBuffer.DispatchCompute(generateHeatMapComputeShader, generateHeatMapComputeShaderKernel, threadGroupsX, threadGroupsY, 1);
+            Graphics.ExecuteCommandBufferAsync(commandBuffer, ComputeQueueType);
         }
 
         private void OnReadbackComplete(int poolIndex, AsyncGPUReadbackRequest req, int dispatchFrame, float dispatchTime)
