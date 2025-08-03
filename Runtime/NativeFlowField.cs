@@ -45,9 +45,6 @@ namespace FlowFieldAI
         public readonly int Height;
         private int Length => Width * Height;
 
-        public int Iterations { get; set; } = 100;
-        public int MaxIterationsPerFrame { get; set; }
-        public bool DiagonalMovement { get; set; }
         public ComputeQueueType ComputeQueueType { get; set; } = ComputeQueueType.Background;
 
         public int FrameLatency { get; private set; }
@@ -106,7 +103,9 @@ namespace FlowFieldAI
             bufferPool = new NativeArrayPool(minBuffers, maxBuffers, Length);
         }
 
-        public AsyncGPUReadbackRequest Bake(NativeArray<float> distanceMap)
+        public AsyncGPUReadbackRequest Bake(NativeArray<float> distanceMap) => Bake(distanceMap, BakeOptions.Default);
+
+        public AsyncGPUReadbackRequest Bake(NativeArray<float> distanceMap, BakeOptions bakeOptions)
         {
             ValidateMatrixDimensions(distanceMap);
 
@@ -116,16 +115,16 @@ namespace FlowFieldAI
             }
 
             // Generate integration field
-            PerformIntegration(distanceMap);
+            PerformIntegration(distanceMap, bakeOptions);
 
             // Do not finalize flow field and heat map until incremental dispatch is complete.
-            if (currentStep < Iterations - 1)
+            if (currentStep < bakeOptions.Iterations - 1)
             {
                 return default;
             }
 
             // Generate flow field
-            GenerateFlowField();
+            GenerateFlowField(bakeOptions);
 
             // Generate heat map
             GenerateHeatMap();
@@ -144,19 +143,19 @@ namespace FlowFieldAI
                 req => OnReadbackComplete(poolIndex, req, dispatchFrame, dispatchTime));
         }
 
-        private void PerformIntegration(NativeArray<float> obstacleMap)
+        private void PerformIntegration(NativeArray<float> obstacleMap, BakeOptions bakeOptions)
         {
             commandBuffer.name = "NativeDijkstraMap";
             commandBuffer.Clear();
             commandBuffer.SetExecutionFlags(CommandBufferExecutionFlags.AsyncCompute);
             commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.Width, Width);
             commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.Height, Height);
-            commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.DiagonalMovement, DiagonalMovement ? 1 : 0);
+            commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.DiagonalMovement, bakeOptions.DiagonalMovement ? 1 : 0);
 
-            var maxIterationsPerFrame = MaxIterationsPerFrame;
-            if (maxIterationsPerFrame <= 0 || maxIterationsPerFrame > Iterations)
+            var maxIterationsPerFrame = bakeOptions.IterationsPerFrame;
+            if (maxIterationsPerFrame <= 0 || maxIterationsPerFrame > bakeOptions.Iterations)
             {
-                maxIterationsPerFrame = Iterations;
+                maxIterationsPerFrame = bakeOptions.Iterations;
                 currentStep = 0;
             }
 
@@ -165,7 +164,7 @@ namespace FlowFieldAI
                 commandBuffer.SetBufferData(integrationFrontBuffer, obstacleMap);
             }
 
-            var iterationsRemaining = Iterations - currentStep;
+            var iterationsRemaining = bakeOptions.Iterations - currentStep;
             var iterationsThisFrame = Mathf.Min(iterationsRemaining, maxIterationsPerFrame);
 
             for (var i = 0; i < iterationsThisFrame; i++)
@@ -190,14 +189,14 @@ namespace FlowFieldAI
             Graphics.ExecuteCommandBufferAsync(commandBuffer, ComputeQueueType);
         }
 
-        private void GenerateFlowField()
+        private void GenerateFlowField(BakeOptions bakeOptions)
         {
             var threadGroupsX = Mathf.CeilToInt(Width / 8f);
             var threadGroupsY = Mathf.CeilToInt(Height / 8f);
 
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Width, Width);
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Height, Height);
-            commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.DiagonalMovement, DiagonalMovement ? 1 : 0);
+            commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.DiagonalMovement, bakeOptions.DiagonalMovement ? 1 : 0);
             commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
             commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.OutputFlowField, flowFieldBuffer);
             commandBuffer.DispatchCompute(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, threadGroupsX, threadGroupsY, 1);

@@ -33,12 +33,15 @@ namespace FlowFieldAI.Tests
         {
             var distanceMap = TestUtils.ParseObstacleMapString(BasicDistanceMap, Width, Height, Allocator.Persistent);
             var flowField = new NativeFlowField(Width, Height);
-            flowField.DiagonalMovement = true;
-            flowField.Iterations = 20;
+            var bakeOptions = new BakeOptions
+            {
+                DiagonalMovement = true,
+                Iterations = 20,
+            };
 
             try
             {
-                flowField.Bake(distanceMap).WaitForCompletion();
+                flowField.Bake(distanceMap, bakeOptions).WaitForCompletion();
                 flowField.FlowField.ShouldBeEqualTo(ExpectedFlowField, Width, Height);
             }
             finally
@@ -53,12 +56,15 @@ namespace FlowFieldAI.Tests
         {
             var distanceMap = TestUtils.ParseObstacleMapString(BasicDistanceMap, Width, Height, Allocator.Persistent);
             var flowField = new NativeFlowField(Width, Height);
-            flowField.DiagonalMovement = true;
-            flowField.Iterations = 0;
+            var bakeOptions = new BakeOptions
+            {
+                DiagonalMovement = true,
+                Iterations = 0,
+            };
 
             try
             {
-                flowField.Bake(distanceMap).WaitForCompletion();
+                flowField.Bake(distanceMap, bakeOptions).WaitForCompletion();
                 flowField.FlowField.ShouldBeEqualTo(ExpectedFlowField_ZeroIteration, Width, Height);
             }
             finally
@@ -73,12 +79,15 @@ namespace FlowFieldAI.Tests
         {
             var distanceMap = TestUtils.ParseObstacleMapString(BasicDistanceMap, Width, Height, Allocator.Persistent);
             var flowField = new NativeFlowField(Width, Height);
-            flowField.DiagonalMovement = true;
-            flowField.Iterations = 1;
+            var bakeOptions = new BakeOptions
+            {
+                DiagonalMovement = true,
+                Iterations = 1,
+            };
 
             try
             {
-                flowField.Bake(distanceMap).WaitForCompletion();
+                flowField.Bake(distanceMap, bakeOptions).WaitForCompletion();
                 flowField.FlowField.ShouldBeEqualTo(ExpectedFlowField_SingleIteration, Width, Height);
             }
             finally
