@@ -23,8 +23,8 @@ namespace FlowFieldAI.Tests
                     var c = obstacleMap[y * width + x];
                     nativeObstacleMap[y * width + x] = c switch
                     {
-                        '░' => NativeFlowField.Free,
-                        '█' => NativeFlowField.Obstacle,
+                        '░' => NativeFlowField.FreeTile,
+                        '█' => NativeFlowField.ObstacleTile,
                         '0' => 0,
                         _ => throw new ArgumentException($"Invalid ObstacleMap char: {c} in string: {obstacleMap}", $"{nameof(obstacleMap)} at ({x},{y})"),
                     };
