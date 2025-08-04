@@ -5,29 +5,84 @@ using UnityEngine.Rendering;
 
 namespace FlowFieldAI
 {
+    /// <summary>
+    /// GPU-accelerated flow field generator for grid-based navigation.
+    ///
+    /// Computes movement directions from any point on the grid to one or more targets,
+    /// using a distance field propagated on the GPU.
+    ///
+    /// Designed for large agent counts, dynamic obstacles, and real-time updates.
+    /// Results are written to a NativeArray and optionally a RenderTexture heatmap.
+    /// </summary>
     public class NativeFlowField : IDisposable
     {
         // ─────────────────────────────────────────────────────────────
         // Public Properties
         // ─────────────────────────────────────────────────────────────
-        public NativeArray<int> FlowField { get; private set; }
+
+        /// <summary>
+        /// The final flow field result. Each index maps to the next cell to move to in order to approach the nearest target.
+        /// </summary>
+        public NativeArray<int> NextIndices { get; private set; }
+
+        /// <summary>
+        /// A RenderTexture visualization of the latest distance propagation heat map. Optional; generated only if requested.
+        /// </summary>
         public RenderTexture HeatMap => heatMapFrontBuffer;
 
+        /// <summary>
+        /// The width of the flow field, in cells.
+        /// </summary>
         public readonly int Width;
+
+        /// <summary>
+        /// The height of the flow field, in cells.
+        /// </summary>
         public readonly int Height;
+
+        /// <summary>
+        /// Total number of cells in the flow field. Equals Width × Height.
+        /// </summary>
         public int Length => Width * Height;
 
+        /// <summary>
+        /// Number of frames elapsed between a Bake call and final data availability (readback complete).
+        /// </summary>
         public int FrameLatency { get; private set; }
+
+        /// <summary>
+        /// Time elapsed in seconds between a Bake call and final data availability (readback complete).
+        /// </summary>
         public float TimeLatency { get; private set; }
+
+        /// <summary>
+        /// Number of internal GPU buffers currently in use for overlapping async compute dispatches.
+        /// </summary>
         public int BuffersActive => bufferPool.RentedOutCount;
+
+        /// <summary>
+        /// Total number of GPU buffers currently allocated.
+        /// </summary>
         public int BuffersAllocated => bufferPool.Count;
+
+        /// <summary>
+        /// Maximum allowed number of internal GPU buffers in the pool.
+        /// </summary>
         public int BuffersCapacity => bufferPool.Capacity;
 
         // ─────────────────────────────────────────────────────────────
         // Constants
         // ─────────────────────────────────────────────────────────────
-        public const float ObstacleTile = float.MaxValue;
-        public const float FreeTile = float.MinValue;
+
+        /// <summary>
+        /// Sentinel value used to mark impassable cells (obstacles) in the input field.
+        /// </summary>
+        public const float ObstacleCell = float.MaxValue;
+
+        /// <summary>
+        /// Sentinel value used to mark walkable, non-target cells in the input field.
+        /// </summary>
+        public const float FreeCell = float.MinValue;
 
         private static class ShaderProperties
         {
@@ -67,8 +122,27 @@ namespace FlowFieldAI
         // ─────────────────────────────────────────────────────────────
         // Constructor
         // ─────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Creates a new flow field instance with the specified resolution and optional GPU heat map output.
+        /// </summary>
+        /// <param name="width">Field width in cells.</param>
+        /// <param name="height">Field height in cells.</param>
+        /// <param name="generateHeatMap">If true, allocates an additional render texture to visualize distance propagation.</param>
+        /// <param name="minBuffers">Minimum number of buffers to keep pooled.</param>
+        /// <param name="maxBuffers">Maximum number of buffers allowed for async dispatching.</param>
         public NativeFlowField(int width, int height, bool generateHeatMap=false, int minBuffers=2, int maxBuffers=5)
         {
+            if (minBuffers < 2)
+            {
+                throw new ArgumentException("minBuffers must be at least 2");
+            }
+
+            if (maxBuffers < minBuffers)
+            {
+                throw new ArgumentException("maxBuffers must be at least minBuffers");
+            }
+
             Width = width;
             Height = height;
 
@@ -101,22 +175,16 @@ namespace FlowFieldAI
                 };
             }
 
-            if (minBuffers < 2)
-            {
-                throw new ArgumentException("minBuffers must be at least 2");
-            }
-
-            if (maxBuffers < minBuffers)
-            {
-                throw new ArgumentException("maxBuffers must be at least minBuffers");
-            }
-
             bufferPool = new NativeArrayPool(minBuffers, maxBuffers, Length);
         }
 
         // ─────────────────────────────────────────────────────────────
         // Public Methods
         // ─────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Releases all GPU and native memory resources associated with this flow field instance.
+        /// </summary>
         public void Dispose()
         {
             integrationFrontBuffer.Dispose();
@@ -127,8 +195,27 @@ namespace FlowFieldAI
             heatMapFrontBuffer?.Release();
         }
 
+        /// <summary>
+        /// Starts a new asynchronous bake using the default options.
+        /// The returned request can be used to track GPU readback completion.
+        /// </summary>
+        /// <param name="inputField">
+        /// A native array representing the input field. Use <see cref="ObstacleCell"/> and <see cref="FreeCell"/> for special cells,
+        /// and numerical values for target weights.
+        /// </param>
+        /// <returns>An async GPU readback request that completes when the field is ready.</returns>
         public AsyncGPUReadbackRequest Bake(NativeArray<float> inputField) => Bake(inputField, BakeOptions.Default);
 
+        /// <summary>
+        /// Starts a new asynchronous bake using the specified bake options.
+        /// The returned request can be used to track GPU readback completion.
+        /// </summary>
+        /// <param name="inputField">
+        /// A native array representing the input field. Use <see cref="ObstacleCell"/> and <see cref="FreeCell"/> for special cells,
+        /// and numerical values for target weights.
+        /// </param>
+        /// <param name="bakeOptions">Configuration options for this bake operation.</param>
+        /// <returns>An async GPU readback request that completes when the field is ready.</returns>
         public AsyncGPUReadbackRequest Bake(NativeArray<float> inputField, BakeOptions bakeOptions)
         {
             ValidateMatrixDimensions(inputField);
@@ -291,13 +378,13 @@ namespace FlowFieldAI
             TimeLatency = Time.realtimeSinceStartup - dispatchTime;
 
             // Return front buffer to pool
-            if (FlowField.IsCreated)
+            if (NextIndices.IsCreated)
             {
                 bufferPool.Return(frontBufferPoolIndex);
             }
 
             // Present front buffer
-            FlowField = bufferPool[poolIndex];
+            NextIndices = bufferPool[poolIndex];
             frontBufferPoolIndex = poolIndex;
 
             // Present heat map

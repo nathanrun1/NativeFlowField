@@ -44,9 +44,9 @@ flowField.DiagonalMovement = true;
 
 ### Step 2: Create an input field
 
-The input field contains the map data that will be baked. Each element represents a tile that can be either Walkable, Obstacle or Target.
+The input field contains the map data that will be baked. Each element represents a cell that can be either Walkable, Obstacle or Target.
 
-It is possible to mark multiple tiles as targets and (optionally) give them different priority. A value of zero represents default priority, while positive numbers have lower priority and negative numbers have higher priority.
+It is possible to mark multiple cells as targets and (optionally) give them different priority. A value of zero represents default priority, while positive numbers have lower priority and negative numbers have higher priority.
 
 
 ```
@@ -85,7 +85,7 @@ The Bake method dispatches compute shader passes that propagates the distance fi
 
 ### Step 3: Use the Result
 
-Once the GPU has finished baking the input field, the resulting flow field can be accessed from the `NextIndices` property. `NextIndices` is a `NativeArray<int>` where each element holds the index of the adjacent tile with the lowest distance to target. This makes navigating towards the target as simple as following the indices of the array.
+Once the GPU has finished baking the input field, the resulting flow field can be accessed from the `NextIndices` property. `NextIndices` is a `NativeArray<int>` where each element holds the index of the adjacent cell with the lowest distance to target. This makes navigating towards the target as simple as following the indices of the array.
 
 Here is an example of a job that helps agents navigate towards targets:
 
@@ -101,17 +101,17 @@ private unsafe partial struct NavigationJob : IJobEntity
 
     private void Execute(ref LocalTransform transform, in Agent _)
     {
-        // Calculate the current tile from the transform position
-        int2 currentTile = (int2)math.round(transform.Position.xz);
-        int currentTileIndex = currentTileIndex.x + currentTileIndex.y * Width;
+        // Calculate the current cell from the transform position
+        int2 currentCell = (int2)math.round(transform.Position.xz);
+        int currentCellIndex = currentCellIndex.x + currentCellIndex.y * Width;
     
-        // Traverse to the next tile
-        // If the Target has been reached, nextTileIndex will equal currentTileIndex
-        int newTileIndex = FlowField[currentTileIndex];
+        // Traverse to the next cell
+        // If the Target has been reached, nextCellIndex will equal currentCellIndex
+        int newCellIndex = FlowField[currentCellIndex];
     
-        // Update transform position to new tile
-        transform.Position.x = newTileIndex % Width;
-        transform.Position.y = (int)(newTileIndex / Width);
+        // Update transform position to new cell
+        transform.Position.x = newCellIndex % Width;
+        transform.Position.y = (int)(newCellIndex / Width);
     }
 }
 ```

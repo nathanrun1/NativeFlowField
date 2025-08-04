@@ -23,8 +23,8 @@ namespace FlowFieldAI.Tests
                     var c = obstacleMap[y * width + x];
                     nativeObstacleMap[y * width + x] = c switch
                     {
-                        '░' => NativeFlowField.FreeTile,
-                        '█' => NativeFlowField.ObstacleTile,
+                        '░' => NativeFlowField.FreeCell,
+                        '█' => NativeFlowField.ObstacleCell,
                         '0' => 0,
                         _ => throw new ArgumentException($"Invalid ObstacleMap char: {c} in string: {obstacleMap}", $"{nameof(obstacleMap)} at ({x},{y})"),
                     };
@@ -102,8 +102,8 @@ namespace FlowFieldAI.Tests
                     }
                     else
                     {
-                        var nextTile = new int2(nextIndex % width, nextIndex / width);
-                        var delta = nextTile - new int2(x, y);
+                        var nextCell = new int2(nextIndex % width, nextIndex / width);
+                        var delta = nextCell - new int2(x, y);
                         sb.Append(Arrows[delta]);
                     }
                     sb.Append(' ');

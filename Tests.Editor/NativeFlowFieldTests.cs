@@ -42,7 +42,7 @@ namespace FlowFieldAI.Tests
             try
             {
                 flowField.Bake(distanceMap, bakeOptions).WaitForCompletion();
-                flowField.FlowField.ShouldBeEqualTo(ExpectedFlowField, Width, Height);
+                flowField.NextIndices.ShouldBeEqualTo(ExpectedFlowField, Width, Height);
             }
             finally
             {
@@ -65,7 +65,7 @@ namespace FlowFieldAI.Tests
             try
             {
                 flowField.Bake(distanceMap, bakeOptions).WaitForCompletion();
-                flowField.FlowField.ShouldBeEqualTo(ExpectedFlowField_ZeroIteration, Width, Height);
+                flowField.NextIndices.ShouldBeEqualTo(ExpectedFlowField_ZeroIteration, Width, Height);
             }
             finally
             {
@@ -88,7 +88,7 @@ namespace FlowFieldAI.Tests
             try
             {
                 flowField.Bake(distanceMap, bakeOptions).WaitForCompletion();
-                flowField.FlowField.ShouldBeEqualTo(ExpectedFlowField_SingleIteration, Width, Height);
+                flowField.NextIndices.ShouldBeEqualTo(ExpectedFlowField_SingleIteration, Width, Height);
             }
             finally
             {
