@@ -141,7 +141,13 @@ flowField.Dispose();
 
 ## Limitations
 
-TBD
+#### 2D Grid Topology
+
+Currently, `NativeFlowField` only supports 2D uniform grid layouts. This covers most RTS, tower defense, and crowd simulation scenarios. However, support for 3D grids or general graph structures could be implemented in the future.
+
+#### Async Compute
+
+Although `NativeFlowField` was designed with Unity’s async compute pipeline in mind, in practice the compute workload still impacts the render thread, especially for large iteration counts. As a workaround, `BakeOptions.IterationsPerFrame` allows compute workloads to be spread across multiple frames, avoiding large frame spikes and helping maintain a consistent framerate.
 
 ## Contributing
 
