@@ -1,4 +1,5 @@
-﻿using UnityEngine.Rendering;
+﻿using System;
+using UnityEngine.Rendering;
 
 namespace FlowFieldAI
 {
@@ -8,6 +9,7 @@ namespace FlowFieldAI
     /// Controls how many propagation steps to run, whether to allow diagonal movement,
     /// and how the workload is distributed across frames.
     /// </summary>
+    [Serializable]
     public struct BakeOptions
     {
         /// <summary>

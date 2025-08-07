@@ -2,6 +2,9 @@
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
+using System.Diagnostics;
+using Unity.Entities;
+using Debug = UnityEngine.Debug;
 
 namespace FlowFieldAI
 {
@@ -13,8 +16,10 @@ namespace FlowFieldAI
     ///
     /// Designed for large agent counts, dynamic obstacles, and real-time updates.
     /// Results are written to a NativeArray and optionally a RenderTexture heatmap.
+    ///
+    /// Can be attached to entities as a managed component for usage in Unity DOTS workflows.
     /// </summary>
-    public class NativeFlowField : IDisposable
+    public class NativeFlowField : IComponentData, IDisposable
     {
         // ─────────────────────────────────────────────────────────────
         // Public Properties
@@ -48,12 +53,17 @@ namespace FlowFieldAI
         /// <summary>
         /// Number of frames elapsed between a Bake call and final data availability (readback complete).
         /// </summary>
-        public int FrameLatency { get; private set; }
+        public int BakeFrameLatency { get; private set; }
 
         /// <summary>
         /// Time elapsed in seconds between a Bake call and final data availability (readback complete).
         /// </summary>
-        public float TimeLatency { get; private set; }
+        public float BakeTimeLatency { get; private set; }
+
+        /// <summary>
+        /// Time elapsed in seconds on the main thread during the last Bake call.
+        /// </summary>
+        public float BakeDispatchTime { get; private set; }
 
         /// <summary>
         /// Number of internal GPU buffers currently in use for overlapping async compute dispatches.
@@ -118,10 +128,17 @@ namespace FlowFieldAI
 
         private BakeContext bakeContext;
         private readonly CommandBuffer commandBuffer = new();
+        private readonly Stopwatch bakeTimer = Stopwatch.StartNew();
 
         // ─────────────────────────────────────────────────────────────
         // Constructor
         // ─────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Default constructor required for IComponentData serialization.
+        /// </summary>
+        /// <exception cref="NotImplementedException"></exception>
+        public NativeFlowField() : this(1, 1) => throw new NotImplementedException();
 
         /// <summary>
         /// Creates a new flow field instance with the specified resolution and optional GPU heat map output.
@@ -218,21 +235,18 @@ namespace FlowFieldAI
         /// <returns>An async GPU readback request that completes when the field is ready.</returns>
         public AsyncGPUReadbackRequest Bake(NativeArray<float> inputField, BakeOptions bakeOptions)
         {
+            bakeTimer.Restart();
+
             ValidateMatrixDimensions(inputField);
 
             if (bufferPool.IsExhausted)
             {
+                BakeDispatchTime = (float)bakeTimer.Elapsed.TotalSeconds;
                 return default;
             }
 
             // Initialize buffers
             var iterationsThisFrame = InitializeBake(inputField, bakeOptions);
-
-            // All iterations have been dispatched, waiting for readback
-            if (iterationsThisFrame <= 0)
-            {
-                return default;
-            }
 
             // Generate integration field
             PerformIntegration(iterationsThisFrame);
@@ -240,6 +254,7 @@ namespace FlowFieldAI
             // Do not finalize flow field and heat map until incremental dispatch is complete.
             if (bakeContext.Options.IsIncrementalBake && bakeContext.CurrentIteration < bakeContext.Options.Iterations)
             {
+                BakeDispatchTime = (float)bakeTimer.Elapsed.TotalSeconds;
                 return default;
             }
 
@@ -254,6 +269,8 @@ namespace FlowFieldAI
             var buffer = bufferPool[poolIndex];
             var dispatchFrame = Time.frameCount;
             var dispatchTime = Time.realtimeSinceStartup;
+
+            BakeDispatchTime = (float)bakeTimer.Elapsed.TotalSeconds;
 
             // Dispatch async readback request
             return AsyncGPUReadback.RequestIntoNativeArray(
@@ -287,7 +304,7 @@ namespace FlowFieldAI
                 : Mathf.Min(iterationsRemaining, bakeOptions.Iterations);
 
             // Initialize compute buffers
-            if (iterationsThisFrame > 0)
+            if (bakeContext.CurrentIteration == 0)
             {
                 // Initialize graphics command buffer
                 commandBuffer.name = "NativeFlowField";
@@ -374,8 +391,8 @@ namespace FlowFieldAI
             }
 
             // Update latency
-            FrameLatency = Time.frameCount - dispatchFrame;
-            TimeLatency = Time.realtimeSinceStartup - dispatchTime;
+            BakeFrameLatency = Time.frameCount - dispatchFrame;
+            BakeTimeLatency = Time.realtimeSinceStartup - dispatchTime;
 
             // Return front buffer to pool
             if (NextIndices.IsCreated)
@@ -397,7 +414,7 @@ namespace FlowFieldAI
             bakeContext = null;
         }
 
-        [System.Diagnostics.Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
         private void ValidateMatrixDimensions(NativeArray<float> matrix)
         {
             if (matrix.Length != Length)

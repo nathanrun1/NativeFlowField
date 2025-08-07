@@ -2,13 +2,15 @@
 {
     Properties
     {
-        _MainTex ("Texture", 2D) = "white" {}
+        [NoScaleOffset] _MainTex ("Texture", 2D) = "white" {}
         MinCost ("Min Cost", Float) = 0
         MaxCost ("Max Cost", Float) = 10
         Alpha ("Alpha", Float) = 1
         FlowSpeed ("Flow Speed", Float) = 0
         FlowCycle ("Flow Cycle", Float) = 1
         [Enum(Inferno,0, Magma,1, Plasma,2, Viridis,3)] Gradient ("Gradient", Float) = 0
+        FreeColor ("Free Color", Color) = (0, 0, 0, 0)
+        ObstacleColor ("Obstacle Color", Color) = (.1, .1, .1, 1)
     }
     SubShader
     {
@@ -53,19 +55,24 @@
             float FlowSpeed;
             float FlowCycle;
             float Gradient;
+            float4 FreeColor;
+            float4 ObstacleColor;
 
             fixed4 frag(v2f i) : SV_Target
             {
                 float value = UNITY_SAMPLE_TEX2D( _MainTex, i.uv );
 
                 if (value == 0) return float4(gradient(Gradient, 1), Alpha);  // Target
-                if (value <= FLT_MIN) return float4(0, 0, 0, 0); // Free
-                if (value >= FLT_MAX) return float4(0, 0, 0, 0); // Obstacle
+                if (value <= FLT_MIN) return FreeColor; // Free
+                if (value >= FLT_MAX) return ObstacleColor; // Obstacle
                 if (value > MaxCost) return float4(0, 0, 0, 0); // Too far away from target
 
                 value = (value - MaxCost) / (MinCost - MaxCost);    // Scale
                 value = FlowCycle*value - _Time.y*FlowSpeed;    // Animate Flow
+
+                if (value > 1) value = value % 1;  // Modulo
                 if (value < 0) value -= (int)value - 1;  // Modulo
+
                 float normalized = saturate(value); // Normalize
                 return float4(gradient(Gradient, normalized), Alpha);  // Gradient
             }
