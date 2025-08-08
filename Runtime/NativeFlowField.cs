@@ -286,6 +286,11 @@ namespace FlowFieldAI
         // ─────────────────────────────────────────────────────────────
         private int InitializeBake(NativeArray<float> inputField, BakeOptions bakeOptions)
         {
+            // Initialize graphics command buffer
+            commandBuffer.Clear();
+            commandBuffer.name = "NativeFlowField CommandBuffer";
+            commandBuffer.SetExecutionFlags(CommandBufferExecutionFlags.AsyncCompute);
+
             // Do not reset bake context if incremental bake is in progress.
             var initializeNewBake = !bakeOptions.IsIncrementalBake || bakeContext == null;
             if (initializeNewBake)
@@ -303,19 +308,10 @@ namespace FlowFieldAI
                 ? Mathf.Min(iterationsRemaining, bakeOptions.IterationsPerFrame)
                 : Mathf.Min(iterationsRemaining, bakeOptions.Iterations);
 
-            // Initialize compute buffers
-            if (bakeContext.CurrentIteration == 0)
+            // Initialize compute buffer  with input field
+            if (bakeContext.CurrentIteration == 0 && initializeNewBake)
             {
-                // Initialize graphics command buffer
-                commandBuffer.name = "NativeFlowField";
-                commandBuffer.Clear();
-                commandBuffer.SetExecutionFlags(CommandBufferExecutionFlags.AsyncCompute);
-
-                // Initialize compute buffer with input field
-                if (initializeNewBake)
-                {
-                    commandBuffer.SetBufferData(integrationFrontBuffer, inputField);
-                }
+                commandBuffer.SetBufferData(integrationFrontBuffer, inputField);
             }
 
             return iterationsThisFrame;
@@ -353,6 +349,10 @@ namespace FlowFieldAI
             var threadGroupsX = Mathf.CeilToInt(Width / 8f);
             var threadGroupsY = Mathf.CeilToInt(Height / 8f);
 
+            commandBuffer.Clear();
+            commandBuffer.name = "NativeFlowField CommandBuffer - GenerateFlowField";
+            commandBuffer.SetExecutionFlags(CommandBufferExecutionFlags.AsyncCompute);
+
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Width, Width);
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Height, Height);
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.DiagonalMovement, bakeContext.Options.DiagonalMovement ? 1 : 0);
@@ -372,6 +372,10 @@ namespace FlowFieldAI
 
             var threadGroupsX = Mathf.CeilToInt(Width / 8f);
             var threadGroupsY = Mathf.CeilToInt(Height / 8f);
+
+            commandBuffer.Clear();
+            commandBuffer.name = "NativeFlowField CommandBuffer - GenerateHeatMap";
+            commandBuffer.SetExecutionFlags(CommandBufferExecutionFlags.AsyncCompute);
 
             commandBuffer.SetComputeIntParam(generateHeatMapComputeShader, ShaderProperties.Width, Width);
             commandBuffer.SetComputeIntParam(generateHeatMapComputeShader, ShaderProperties.Height, Height);
