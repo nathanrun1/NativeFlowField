@@ -23,17 +23,6 @@ For a complete sample project, check out the [NativeFlowFieldDemo](https://githu
 
 ## Usage
 
-<table>
-  <tr>
-    <td align="center"><img src="Media/usage1.png" alt="Input field" width="100%"/></td>
-    <td align="center"><img src="Media/usage2.webp" alt="Field propagation" width="100%"/></td>
-    <td align="center"><img src="Media/usage3.png" alt="Flow movement" width="100%"/></td>
-  </tr>
-    <td align="center">Input field</td>
-    <td align="center">Field propagation</td>
-    <td align="center">Flow movement</td>
-</table>
-
 ### Step 1: Create a NativeFlowField
 
 Let's create a tiny 7x7 flow field with a heatmap for visualizion
@@ -43,6 +32,8 @@ var flowField = new NativeFlowField(width: 7, height: 7, generateHeatMap: true);
 ```
 
 ### Step 2: Create an input field
+
+<img src="Media/usage1.png" alt="Field Propagation" width="250px"/>
 
 The input field contains the map data that will be baked.
 
@@ -75,6 +66,8 @@ It is possible to mark multiple cells as targets and (optionally) give them diff
 
 ### Step 3: Bake the Flow Field
 
+<img src="Media/usage2.webp" alt="Field Propagation" width="250px"/>
+
 The Bake method dispatches compute shader passes that propagate the distance field step-by-step outwards from the Target.
 
 ```
@@ -85,7 +78,9 @@ flowField.Bake(inputField);
 > The Bake method returns a `AsyncGPUReadbackRequest`, which you can poll or wait for if blocking behavior is needed (e.g., during testing). For real-time applications, however, it is recommended that you recreate the input field and call `Bake` every frame (or whenever the terrain has been updated).
 >
 
-### Step 3: Use the Result
+### Step 3: Move across the Flow Field
+
+<img src="Media/usage3.webp" alt="Field Propagation" width="250px"/>
 
 Once the GPU has finished baking the input field, the resulting flow field can be accessed from the `NextIndices` array where each element points to the adjacent cell with the lowest distance to target. This makes navigating towards the target as simple as following the indices of the array.
 
