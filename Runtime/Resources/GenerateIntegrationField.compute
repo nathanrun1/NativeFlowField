@@ -5,6 +5,8 @@
 uint Width;
 uint Height;
 int DiagonalMovement;
+int UseTravelCosts;
+StructuredBuffer<float> TravelCosts;
 StructuredBuffer<float> InputCosts;
 RWStructuredBuffer<float> OutputCosts;
 
@@ -23,14 +25,16 @@ float getMinCost(uint x, uint y)
         int nx = x + offsets[i].x;
         int ny = y + offsets[i].y;
 
-        if (nx >= 0 && (uint)nx < Width && ny >= 0 && (uint)ny < Height)
+        if (nx >= 0 && (uint) nx < Width && ny >= 0 && (uint) ny < Height)
         {
             bool isDiagonal = i >= 4;
             if (isDiagonal)
             {
                 // Both orthogonal must be free
-                if (InputCosts[flatten(x + offsets[i].x, y, Width)] >= FLT_MAX-1) continue;
-                if (InputCosts[flatten(x, y + offsets[i].y, Width)] >= FLT_MAX-1) continue;
+                if (InputCosts[flatten(x + offsets[i].x, y, Width)] >= FLT_MAX - 1)
+                    continue;
+                if (InputCosts[flatten(x, y + offsets[i].y, Width)] >= FLT_MAX - 1)
+                    continue;
             }
             uint neighborIndex = flatten(nx, ny, Width);
             float neighborCost = InputCosts[neighborIndex];
@@ -41,11 +45,16 @@ float getMinCost(uint x, uint y)
                 if (minCost <= FLT_MIN) // Free
                     minCost = neighborCost + stepCost;
                 else
+                    // minCost = min(minCost, neighborCost + stepCost);
                     minCost = min(minCost, neighborCost + stepCost);
             }
         }
     }
 
+    if (UseTravelCosts)
+    {
+        minCost = min(FLT_MAX, minCost + TravelCosts[flatten(x, y, Width)]); // Add travel cost
+    }
     return minCost;
 }
 

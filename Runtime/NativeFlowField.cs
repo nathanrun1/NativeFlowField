@@ -5,6 +5,7 @@ using UnityEngine.Rendering;
 using System.Diagnostics;
 using Unity.Entities;
 using Debug = UnityEngine.Debug;
+using System.Linq;
 
 namespace FlowFieldAI
 {
@@ -99,6 +100,8 @@ namespace FlowFieldAI
             public static readonly int Width = Shader.PropertyToID("Width");
             public static readonly int Height = Shader.PropertyToID("Height");
             public static readonly int DiagonalMovement = Shader.PropertyToID("DiagonalMovement");
+            public static readonly int UseTravelCosts = Shader.PropertyToID("UseTravelCosts");
+            public static readonly int TravelCosts = Shader.PropertyToID("TravelCosts");
             public static readonly int InputCosts = Shader.PropertyToID("InputCosts");
             public static readonly int OutputCosts = Shader.PropertyToID("OutputCosts");
             public static readonly int OutputHeatMap = Shader.PropertyToID("OutputHeatMap");
@@ -110,6 +113,8 @@ namespace FlowFieldAI
         // ─────────────────────────────────────────────────────────────
         private readonly ComputeShader integrationComputeShader;
         private readonly int integrationComputeShaderKernel;
+        private ComputeBuffer integrationTravelCostsBuffer; // NEW
+        private readonly bool useTravelCosts;
         private ComputeBuffer integrationFrontBuffer;
         private ComputeBuffer integrationBackBuffer;
 
@@ -148,7 +153,7 @@ namespace FlowFieldAI
         /// <param name="generateHeatMap">If true, allocates an additional render texture to visualize distance propagation.</param>
         /// <param name="minBuffers">Minimum number of buffers to keep pooled.</param>
         /// <param name="maxBuffers">Maximum number of buffers allowed for async dispatching.</param>
-        public NativeFlowField(int width, int height, bool generateHeatMap=false, int minBuffers=2, int maxBuffers=5)
+        public NativeFlowField(int width, int height, bool generateHeatMap=false, bool useTravelCosts=false, int minBuffers=2, int maxBuffers=5)
         {
             if (minBuffers < 2)
             {
@@ -167,6 +172,9 @@ namespace FlowFieldAI
 
             integrationComputeShader = Resources.Load<ComputeShader>("GenerateIntegrationField");
             integrationComputeShaderKernel = integrationComputeShader.FindKernel("GenerateIntegrationField");
+
+            integrationTravelCostsBuffer = new ComputeBuffer(Length, sizeof(float));
+            this.useTravelCosts = useTravelCosts;
 
             integrationFrontBuffer = new ComputeBuffer(Length, sizeof(float));
             integrationBackBuffer = new ComputeBuffer(Length, sizeof(float));
@@ -204,6 +212,7 @@ namespace FlowFieldAI
         /// </summary>
         public void Dispose()
         {
+            integrationTravelCostsBuffer.Dispose();
             integrationFrontBuffer.Dispose();
             integrationBackBuffer.Dispose();
             flowFieldBuffer.Dispose();
@@ -224,7 +233,7 @@ namespace FlowFieldAI
         public AsyncGPUReadbackRequest Bake(NativeArray<float> inputField) => Bake(inputField, BakeOptions.Default);
 
         /// <summary>
-        /// Starts a new asynchronous bake using the specified bake options.
+        /// Starts a new asynchronous bake using the specified bake options and 0-initialized travel costs.
         /// The returned request can be used to track GPU readback completion.
         /// </summary>
         /// <param name="inputField">
@@ -233,11 +242,28 @@ namespace FlowFieldAI
         /// </param>
         /// <param name="bakeOptions">Configuration options for this bake operation.</param>
         /// <returns>An async GPU readback request that completes when the field is ready.</returns>
-        public AsyncGPUReadbackRequest Bake(NativeArray<float> inputField, BakeOptions bakeOptions)
+        public AsyncGPUReadbackRequest Bake(NativeArray<float> inputField, BakeOptions bakeOptions) => Bake(inputField, new NativeArray<float>(), bakeOptions);
+
+        /// <summary>
+        /// Starts a new asynchronous bake using the specified bake options.
+        /// The returned request can be used to track GPU readback completion.
+        /// </summary>
+        /// <param name="inputField">
+        /// A native array representing the input field. Use <see cref="ObstacleCell"/> and <see cref="FreeCell"/> for special cells,
+        /// and numerical values for target weights.
+        /// </param>
+        /// <param name="travelCosts">
+        /// A native array representing the travel costs of each cell in the input field.
+        /// These costs are added to the minimum weight calculation of each target cell at the same index.
+        /// </param>
+        /// <param name="bakeOptions">Configuration options for this bake operation.</param>
+        /// <returns>An async GPU readback request that completes when the field is ready.</returns>
+        public AsyncGPUReadbackRequest Bake(NativeArray<float> inputField, NativeArray<float> travelCosts, BakeOptions bakeOptions)
         {
             bakeTimer.Restart();
 
             ValidateMatrixDimensions(inputField);
+            if (useTravelCosts) ValidateMatrixDimensions(travelCosts);
 
             if (bufferPool.IsExhausted)
             {
@@ -246,7 +272,7 @@ namespace FlowFieldAI
             }
 
             // Initialize buffers
-            var iterationsThisFrame = InitializeBake(inputField, bakeOptions);
+            var iterationsThisFrame = InitializeBake(inputField, travelCosts, bakeOptions);
 
             // Generate integration field
             PerformIntegration(iterationsThisFrame);
@@ -284,7 +310,7 @@ namespace FlowFieldAI
         // ─────────────────────────────────────────────────────────────
         // Private Methods
         // ─────────────────────────────────────────────────────────────
-        private int InitializeBake(NativeArray<float> inputField, BakeOptions bakeOptions)
+        private int InitializeBake(NativeArray<float> inputField, NativeArray<float> travelCostsField, BakeOptions bakeOptions)
         {
             // Initialize graphics command buffer
             commandBuffer.Clear();
@@ -312,6 +338,8 @@ namespace FlowFieldAI
             if (bakeContext.CurrentIteration == 0 && initializeNewBake)
             {
                 commandBuffer.SetBufferData(integrationFrontBuffer, inputField);
+                if (useTravelCosts)
+                    commandBuffer.SetBufferData(integrationTravelCostsBuffer, travelCostsField);
             }
 
             return iterationsThisFrame;
@@ -322,6 +350,10 @@ namespace FlowFieldAI
             commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.Width, Width);
             commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.Height, Height);
             commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.DiagonalMovement, bakeContext.Options.DiagonalMovement ? 1 : 0);
+            commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.UseTravelCosts, useTravelCosts ? 1 : 0);
+
+            // Assign travel cost buffer
+            commandBuffer.SetComputeBufferParam(integrationComputeShader, integrationComputeShaderKernel, ShaderProperties.TravelCosts, integrationTravelCostsBuffer);
 
             for (var i = 0; i < iterationsThisFrame; i++)
             {
