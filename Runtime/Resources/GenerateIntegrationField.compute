@@ -25,7 +25,7 @@ float getMinCost(uint x, uint y)
         int nx = x + offsets[i].x;
         int ny = y + offsets[i].y;
 
-        if (nx >= 0 && (uint) nx < Width && ny >= 0 && (uint) ny < Height)
+        if (nx >= 0 && (uint)nx < Width && ny >= 0 && (uint)ny < Height)
         {
             bool isDiagonal = i >= 4;
             if (isDiagonal)
@@ -38,6 +38,7 @@ float getMinCost(uint x, uint y)
             }
             uint neighborIndex = flatten(nx, ny, Width);
             float neighborCost = InputCosts[neighborIndex];
+            if (UseTravelCosts) neighborCost += TravelCosts[neighborIndex]; // Add travel cost
 
             if (neighborCost < FLT_MAX && neighborCost > FLT_MIN)
             {
@@ -45,16 +46,11 @@ float getMinCost(uint x, uint y)
                 if (minCost <= FLT_MIN) // Free
                     minCost = neighborCost + stepCost;
                 else
-                    // minCost = min(minCost, neighborCost + stepCost);
                     minCost = min(minCost, neighborCost + stepCost);
             }
         }
     }
 
-    if (UseTravelCosts)
-    {
-        minCost = min(FLT_MAX, minCost + TravelCosts[flatten(x, y, Width)]); // Add travel cost
-    }
     return minCost;
 }
 

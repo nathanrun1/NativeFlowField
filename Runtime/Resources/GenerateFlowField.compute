@@ -5,6 +5,8 @@
 uint Width;
 uint Height;
 int DiagonalMovement;
+int UseTravelCosts;
+StructuredBuffer<float> TravelCosts;
 StructuredBuffer<float> InputCosts;
 RWStructuredBuffer<int> OutputFlowField;
 
@@ -36,6 +38,7 @@ int getFlow(uint x, uint y)
             }
             uint neighborIndex = flatten(nx, ny, Width);
             float neighborCost = InputCosts[neighborIndex];
+            if (UseTravelCosts) neighborCost += TravelCosts[neighborIndex]; // Add travel cost
 
             if (neighborCost < FLT_MAX && neighborCost > FLT_MIN)
             {

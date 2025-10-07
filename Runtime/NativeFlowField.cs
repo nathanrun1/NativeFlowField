@@ -111,10 +111,11 @@ namespace FlowFieldAI
         // ─────────────────────────────────────────────────────────────
         // Private Fields
         // ─────────────────────────────────────────────────────────────
+        private ComputeBuffer travelCostsBuffer; 
+        private readonly bool useTravelCosts;
+
         private readonly ComputeShader integrationComputeShader;
         private readonly int integrationComputeShaderKernel;
-        private ComputeBuffer integrationTravelCostsBuffer; // NEW
-        private readonly bool useTravelCosts;
         private ComputeBuffer integrationFrontBuffer;
         private ComputeBuffer integrationBackBuffer;
 
@@ -170,11 +171,11 @@ namespace FlowFieldAI
 
             this.generateHeatMap = generateHeatMap;
 
+            travelCostsBuffer = new ComputeBuffer(Length, sizeof(float));
+            this.useTravelCosts = useTravelCosts;
+
             integrationComputeShader = Resources.Load<ComputeShader>("GenerateIntegrationField");
             integrationComputeShaderKernel = integrationComputeShader.FindKernel("GenerateIntegrationField");
-
-            integrationTravelCostsBuffer = new ComputeBuffer(Length, sizeof(float));
-            this.useTravelCosts = useTravelCosts;
 
             integrationFrontBuffer = new ComputeBuffer(Length, sizeof(float));
             integrationBackBuffer = new ComputeBuffer(Length, sizeof(float));
@@ -212,7 +213,7 @@ namespace FlowFieldAI
         /// </summary>
         public void Dispose()
         {
-            integrationTravelCostsBuffer.Dispose();
+            travelCostsBuffer.Dispose();
             integrationFrontBuffer.Dispose();
             integrationBackBuffer.Dispose();
             flowFieldBuffer.Dispose();
@@ -339,7 +340,7 @@ namespace FlowFieldAI
             {
                 commandBuffer.SetBufferData(integrationFrontBuffer, inputField);
                 if (useTravelCosts)
-                    commandBuffer.SetBufferData(integrationTravelCostsBuffer, travelCostsField);
+                    commandBuffer.SetBufferData(travelCostsBuffer, travelCostsField);
             }
 
             return iterationsThisFrame;
@@ -353,7 +354,7 @@ namespace FlowFieldAI
             commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.UseTravelCosts, useTravelCosts ? 1 : 0);
 
             // Assign travel cost buffer
-            commandBuffer.SetComputeBufferParam(integrationComputeShader, integrationComputeShaderKernel, ShaderProperties.TravelCosts, integrationTravelCostsBuffer);
+            commandBuffer.SetComputeBufferParam(integrationComputeShader, integrationComputeShaderKernel, ShaderProperties.TravelCosts, travelCostsBuffer);
 
             for (var i = 0; i < iterationsThisFrame; i++)
             {
@@ -388,8 +389,10 @@ namespace FlowFieldAI
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Width, Width);
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Height, Height);
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.DiagonalMovement, bakeContext.Options.DiagonalMovement ? 1 : 0);
+            commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.UseTravelCosts, useTravelCosts ? 1 : 0);
             commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
             commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.OutputFlowField, flowFieldBuffer);
+            commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.TravelCosts, travelCostsBuffer);
             commandBuffer.DispatchCompute(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, threadGroupsX, threadGroupsY, 1);
 
             Graphics.ExecuteCommandBufferAsync(commandBuffer, bakeContext.Options.ComputeQueueType);
