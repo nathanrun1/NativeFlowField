@@ -37,8 +37,10 @@ float getMinCost(uint x, uint y)
                     continue;
             }
             uint neighborIndex = flatten(nx, ny, Width);
-            float neighborCost = InputCosts[neighborIndex];
-            if (UseTravelCosts) neighborCost += TravelCosts[neighborIndex]; // Add travel cost
+            
+            float neighborCost;
+            if (UseTravelCosts) neighborCost = InputCosts[neighborIndex] + TravelCosts[neighborIndex]; // Add travel cost
+            else neighborCost = InputCosts[neighborIndex];
 
             if (neighborCost < FLT_MAX && neighborCost > FLT_MIN)
             {

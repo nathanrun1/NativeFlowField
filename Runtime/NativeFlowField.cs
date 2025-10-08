@@ -111,7 +111,7 @@ namespace FlowFieldAI
         // ─────────────────────────────────────────────────────────────
         // Private Fields
         // ─────────────────────────────────────────────────────────────
-        private ComputeBuffer travelCostsBuffer; 
+        private ComputeBuffer travelCostsBuffer;
         private readonly bool useTravelCosts;
 
         private readonly ComputeShader integrationComputeShader;
@@ -335,7 +335,7 @@ namespace FlowFieldAI
                 ? Mathf.Min(iterationsRemaining, bakeOptions.IterationsPerFrame)
                 : Mathf.Min(iterationsRemaining, bakeOptions.Iterations);
 
-            // Initialize compute buffer  with input field
+            // Initialize compute buffer with input field
             if (bakeContext.CurrentIteration == 0 && initializeNewBake)
             {
                 commandBuffer.SetBufferData(integrationFrontBuffer, inputField);
@@ -389,7 +389,7 @@ namespace FlowFieldAI
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Width, Width);
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.Height, Height);
             commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.DiagonalMovement, bakeContext.Options.DiagonalMovement ? 1 : 0);
-            commandBuffer.SetComputeIntParam(integrationComputeShader, ShaderProperties.UseTravelCosts, useTravelCosts ? 1 : 0);
+            commandBuffer.SetComputeIntParam(generateFlowFieldComputeShader, ShaderProperties.UseTravelCosts, useTravelCosts ? 1 : 0);
             commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.InputCosts, integrationFrontBuffer);
             commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.OutputFlowField, flowFieldBuffer);
             commandBuffer.SetComputeBufferParam(generateFlowFieldComputeShader, generateFlowFieldComputeShaderKernel, ShaderProperties.TravelCosts, travelCostsBuffer);
